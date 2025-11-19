@@ -60,13 +60,44 @@ conda activate seg-eval
 ```python
 import numpy as np
 import pandas as pd
+from claspy.segmentation import BinaryClaSPSegmentation
+from ..utils.metrics import *
 
-#TODO
+def run_clasp(time_series):
+    start_time = time.time()
+    clasp = BinaryClaSPSegmentation()
+    clasp.fit_predict(time_series)
+    change_points = clasp.change_points.tolist()
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    return change_points, elapsed_time
+
+# Run a segmentation method (Clasp here)
+prediction, elapsed_time = run_clasp(data)
+
+
+# For Change Point Detection
+# Compute F-score
+f1 = f_score(groundtruth, prediction)
+
+# Compute coverage
+cov = covering(groundtruth, prediction)
+
+# For State Detection
+# Compute Normalized Mutual Information
+nmi = normalized_mutual_info_score(groundtruth, prediction)
+
+# Compute Adjusted Rand Index
+ari = adjusted_rand_score(groundtruth, prediction)
+
+# Compute Weighted Adjusted Rand Index
+wari = weighted_adjusted_rand_score(groundtruth, prediction)
+
+# Compute State Matching Score
+sms = common_matching_sequence(groundtruth, prediction)
 
 ```
-```
-#TODO output of code snippet
-```
+
 
 
 ## Reproduce the Paper
