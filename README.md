@@ -1,4 +1,20 @@
-# Toward Interpretable Evaluation Measures for Time Series Segmentation - NeurIPS'25
+<p align="center">
+<img width="150" src="./assets/SMS_logo.png"/>
+</p>
+
+
+<h1 align="center">SegEval</h1>
+<h2 align="center">Toward Interpretable Evaluation Measures for Time Series Segmentation</h2>
+<h3 align="center">NeurIPS'25</h3>
+
+<div align="center">
+<p>
+<img alt="GitHub issues" src="https://img.shields.io/github/issues/fchavelli/seg-eval">
+</p>
+</div>
+
+
+
 This repository contains code to reproduce the papers results
 
 ## Library Dependencies
