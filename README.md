@@ -38,15 +38,40 @@ url={https://openreview.net/forum?id=Gz6dujD5j0}
 }
 ```
 
-## Library Dependencies
-We recommand using a Python>3.9.18 virtual environment using the following dependencies.
+## How to use SegEval
+
+### Option 1: Quick install using pip
+
+```bash
+$ pip install 
+```
+
+### Option 2: Install from the source
+
+We recommend using a Python 3.9.18 virtual environment with the following dependencies.
 
 ```bash
 conda env create -f environment.yml
 conda activate seg-eval
 ```
 
-## Dataset Preparation
+### Usage
+
+```python
+import numpy as np
+import pandas as pd
+
+#TODO
+
+```
+```
+#TODO output of code snippet
+```
+
+
+## Reproduce the Paper
+
+### Dataset Preparation
 You can download the datasets used in the paper from the following links:
 
 | Dataset   | Type               | Download Link |
@@ -90,7 +115,7 @@ After downloading the datasets, move them to the '\data' directory, ensuring the
 │   │   ├── ...
 
 ```
-## Reproduce results
+### Reproduce the experimental results
 
 Run main experiment (flag `multivariate` also includes univariate dataset)
 
