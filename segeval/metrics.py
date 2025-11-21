@@ -3,27 +3,28 @@ import scipy.sparse as sp
 from scipy.optimize import linear_sum_assignment
 from sklearn.metrics.cluster._supervised import mutual_info_score, entropy, _generalized_average
 from sklearn.metrics import adjusted_rand_score, normalized_mutual_info_score
+from typing import List, Tuple, Dict, Union, Optional, Set, Any, Iterable
 
 '''
 F1 & Covering scores
 Code adapted from TSSB (time-series-segmentation-benchmark)
 https://github.com/ermshaua/time-series-segmentation-benchmark/blob/95a62b8e1e4e380313f187544c38f3400c1773e5/tssb/evaluation.py
-Athors: Van den Burg, G.J.J. and Williams, C.K.I. from The Alan Turing Institute
+Authors: Van den Burg, G.J.J. and Williams, C.K.I. from The Alan Turing Institute
 '''
 
 #------------------------------------------------------
 # F1 score with margin, adapted from TSSB code
 #------------------------------------------------------
 
-def true_positives(T, X, margin=5):
+def true_positives(T: Set[int], X: Set[int], margin: int = 5) -> Set[int]:
     """
     Compute true positives without double counting.
     
     Parameters
     ----------
-    T : iterable
+    T : set
         True change-point locations.
-    X : iterable
+    X : set
         Predicted change-point locations.
     margin : int, optional
         Maximum allowed distance between a true and a predicted change-point.
@@ -46,7 +47,7 @@ def true_positives(T, X, margin=5):
         X.remove(xstar)  # remove the matched prediction to avoid double counting
     return TP
 
-def f_score(annotation, predictions, margin=None, alpha=0.5, return_PR=False):
+def f_score(annotation: Iterable[int], predictions: Iterable[int], margin: Optional[int] = None, alpha: float = 0.5, return_PR: bool = False) -> Union[float, Tuple[float, float, float]]:
     """
     Compute the F-measure for a single set of annotations.
     
@@ -70,34 +71,27 @@ def f_score(annotation, predictions, margin=None, alpha=0.5, return_PR=False):
     -------
     float or tuple
         The F-measure (and optionally precision and recall).
-        
-    Examples
-    --------
-    >>> f_score([10, 20], [10, 20])
-    1.0
-    >>> f_score([10, 20], [20])
-    0.8  # approximately
     """
 
-    annotation = labels_to_change_points(annotation)
-    predictions = labels_to_change_points(predictions)
+    annotation_cps = labels_to_change_points(annotation)
+    predictions_cps = labels_to_change_points(predictions)
 
     if margin is None:
-        margin = int(0.01 * len(annotation))
+        margin = int(0.01 * len(annotation_cps))
 
     # Ensure that 0 is included in both true annotations and predictions
-    T = set(annotation)
+    T = set(annotation_cps)
     T.add(0)
     
-    X = set(predictions)
+    X = set(predictions_cps)
     X.add(0)
     
     # Compute true positives
     TP = true_positives(T, X, margin=margin)
     
     # Compute precision and recall
-    P = len(TP) / len(X)
-    R = len(TP) / len(T)
+    P = len(TP) / len(X) if len(X) > 0 else 0.0
+    R = len(TP) / len(T) if len(T) > 0 else 0.0
     
     # Compute the F-measure using the weighted harmonic mean
     if P + R == 0:
@@ -113,7 +107,7 @@ def f_score(annotation, predictions, margin=None, alpha=0.5, return_PR=False):
 # Covering score, adaptation from TSSB & optimized version
 #------------------------------------------------------
 
-def labels_to_change_points(labels):
+def labels_to_change_points(labels: Iterable[int]) -> List[int]:
     """
     Convert label sequence into change points (CPs).
     
@@ -123,15 +117,16 @@ def labels_to_change_points(labels):
     Returns:
         list: Change points (CPs) including start (0) and end (n+1).
     """
-    n = len(labels)
+    labels_arr = np.asarray(labels)
+    n = len(labels_arr)
     cp_indices = [0]  # Start at index 0
     for i in range(1, n):
-        if labels[i] != labels[i - 1]:  # Detect change in labels
+        if labels_arr[i] != labels_arr[i - 1]:  # Detect change in labels
             cp_indices.append(i)
     cp_indices.append(n)  # Include last segment boundary
     return cp_indices
 
-def compute_segments(cp_indices):
+def compute_segments(cp_indices: List[int]) -> List[Tuple[int, int]]:
     """
     Convert change points to segment intervals.
     
@@ -143,50 +138,7 @@ def compute_segments(cp_indices):
     """
     return [(cp_indices[i], cp_indices[i + 1]) for i in range(len(cp_indices) - 1)]
 
-def covering_naive(ground_truth_labels, predicted_labels):
-    """
-    Compute the covering score for segmentation based on the given formula.
-    
-    Parameters:
-        ground_truth_labels (list or np.array): Ground truth labels.
-        predicted_labels (list or np.array): Predicted labels.
-    
-    Returns:
-        float: Covering score.
-    """
-    n = len(ground_truth_labels)
-    
-    # Convert labels to change points and then to segments
-    gt_cps = labels_to_change_points(ground_truth_labels)
-    pred_cps = labels_to_change_points(predicted_labels)
-    
-    gt_segments = compute_segments(gt_cps)
-    pred_segments = compute_segments(pred_cps)
-    
-    covering = 0
-
-    # Iterate over ground truth segments
-    for gt_start, gt_end in gt_segments:
-        gt_segment = set(range(gt_start, gt_end))
-        segment_size = len(gt_segment)
-        
-        # Compute max IoU with any predicted segment
-        max_iou = 0
-        for pred_start, pred_end in pred_segments:
-            pred_segment = set(range(pred_start, pred_end))
-            
-            intersection = len(gt_segment & pred_segment)
-            union = len(gt_segment | pred_segment)
-            iou = intersection / union if union > 0 else 0
-            
-            max_iou = max(max_iou, iou)
-        
-        # Weighted sum contribution
-        covering += segment_size * max_iou
-    
-    return covering / n
-
-def covering(ground_truth_labels, predicted_labels):
+def covering(ground_truth_labels: Iterable[int], predicted_labels: Iterable[int]) -> float:
     """
     Compute the covering score for segmentation using an optimized approach.
     
@@ -197,7 +149,7 @@ def covering(ground_truth_labels, predicted_labels):
     Returns:
         float: Covering score.
     """
-    n = len(ground_truth_labels)
+    n = len(list(ground_truth_labels))
     
     # Convert labels to change points and then to segments
     gt_cps = labels_to_change_points(ground_truth_labels)
@@ -206,7 +158,7 @@ def covering(ground_truth_labels, predicted_labels):
     gt_segments = compute_segments(gt_cps)
     pred_segments = compute_segments(pred_cps)
     
-    covering = 0.0
+    covering_score = 0.0
     p_idx = 0
     p_len = len(pred_segments)
     
@@ -233,9 +185,9 @@ def covering(ground_truth_labels, predicted_labels):
             temp_idx += 1
         
         # Weight the IoU by the segment's length
-        covering += segment_size * max_iou
+        covering_score += segment_size * max_iou
     
-    return covering / n
+    return covering_score / n
 
 
 '''
@@ -250,7 +202,7 @@ SPDX-License-Identifier: BSD-3-Clause
 # Weighted Adjusted Rand Index (WARI)
 #------------------------------------------------------
 
-def compute_boundary_distances(labels):
+def compute_boundary_distances(labels: np.ndarray) -> np.ndarray:
     """
     Compute the distance from each point to the nearest change point (boundary)
     in the 1D label sequence.
@@ -261,8 +213,7 @@ def compute_boundary_distances(labels):
     boundaries = np.concatenate([boundaries, boundaries + 1])  # Add the next point for each change point
     boundaries = np.sort(boundaries)
     boundaries = np.concatenate([[0], boundaries, [n-1]])  # Add start and end points
-    # if len(boundaries) == 0:
-    #     return np.full(n, n)  # No boundaries: every point is maximally interior
+    
     indices = np.arange(n)
     pos = np.searchsorted(boundaries, indices)
     distances = np.empty(n, dtype=float)
@@ -283,53 +234,23 @@ def compute_boundary_distances(labels):
     
     return distances
 
-def linear_distance(distances, alpha=0.1):
+def linear_distance(distances: np.ndarray, alpha: float = 0.1) -> np.ndarray:
     """
     Compute the linear distance transformation for boundary distances.
     """
     return 1 + alpha * distances
 
-def weighted_contingency_matrix(labels_true, labels_pred, distance, *, eps=None, sparse=False, dtype=np.float64):
+def weighted_contingency_matrix(labels_true: np.ndarray, labels_pred: np.ndarray, distance: callable, *, eps: Optional[float] = None, sparse: bool = False, dtype: type = np.float64) -> Tuple[Union[np.ndarray, sp.spmatrix], np.ndarray]:
     """
     Build a weighted contingency matrix that describes the relationship between two partitions,
     weighting each sample by the associated weight (e.g., based on its distance to the boundary).
-    
-    Parameters
-    ----------
-    labels_true : array-like of shape (n_samples,)
-        Ground truth labels.
-    
-    labels_pred : array-like of shape (n_samples,)
-        Predicted labels (clustering to evaluate).
-    
-    eps : float, default=None
-        If float, this value is added to all values in the matrix to avoid NaN propagation.
-        If None, no adjustment is made.
-    
-    sparse : bool, default=False
-        If True, returns a sparse CSR matrix.
-    
-    dtype : numeric type, default=np.float64
-        Data type of the output.
-    
-    Returns
-    -------
-    contingency : {array-like, sparse}, shape=[n_classes_true, n_classes_pred]
-        Weighted matrix such that :math:`C_{i,j}` is the sum of the weights of the samples 
-        belonging to true class i and predicted cluster j.
     """
     labels_true = np.asarray(labels_true)
     labels_pred = np.asarray(labels_pred)
     
     # Compute boundary distances for both clusterings
     d_true = compute_boundary_distances(labels_true)
-    #d_pred = compute_boundary_distances(labels_pred)
     
-    # Compute per-point weights from each clustering and then average them.
-    #w_true = distance(d_true)
-    #w_pred = distance(d_pred)
-    #weights = (w_true + w_pred) / 2.0  # symmetric weights for each point
-
     weights = distance(d_true)
     
     if eps is not None and sparse:
@@ -356,22 +277,9 @@ def weighted_contingency_matrix(labels_true, labels_pred, distance, *, eps=None,
             contingency = contingency + eps
     return contingency, weights
 
-def weighted_pair_confusion_matrix(labels_true, labels_pred, distance):
+def weighted_pair_confusion_matrix(labels_true: np.ndarray, labels_pred: np.ndarray, distance: callable) -> np.ndarray:
     """
     Compute the weighted pair confusion matrix from the weighted contingency matrix.
-    
-    For each sample, its weight w(i) is considered. The weighted contingency matrix
-    is constructed such that each cell (i,j) contains the sum of the weights of the samples
-    belonging to true class i and predicted cluster j.
-    
-    The notations used are as follows:
-      - Let M be the weighted contingency matrix.
-      - For each cell, M[i,j] = sum_{samples in (i,j)} w(i).
-      - Let n_true = sum over rows (i.e., S(i) for each true class i), and n_pred = sum over columns.
-    
-    The quantities are calculated as follows:
-      - total_weight = sum_{i} w(i) (weighted equivalent of n_samples)
-      - sum_squares = sum of squares of all non-zero values in M.
     """
     # Build the weighted contingency matrix (sparse for faster computation)
     contingency, weights = weighted_contingency_matrix(labels_true, labels_pred, distance, sparse=True, dtype=np.float64)
@@ -395,13 +303,12 @@ def weighted_pair_confusion_matrix(labels_true, labels_pred, distance):
     
     return C
 
-def weighted_rand_score(labels_true, labels_pred, weights):
+def weighted_rand_score(labels_true: Iterable[int], labels_pred: Iterable[int], weights: callable) -> float:
     """
     Compute the weighted Rand Index (unadjusted) from the weighted pair confusion matrix.
-    
-    The score is defined as the ratio of the sum of agreements (i.e., the sum of the
-    diagonals of the confusion matrix) to the total sum of weighted pairs.
     """
+    labels_true = np.asarray(labels_true)
+    labels_pred = np.asarray(labels_pred)
     C = weighted_pair_confusion_matrix(labels_true, labels_pred, weights)
     numerator = np.trace(C)
     denominator = np.sum(C)
@@ -412,8 +319,12 @@ def weighted_rand_score(labels_true, labels_pred, weights):
     
     return numerator / denominator
 
-def weighted_adjusted_rand_score(labels_true, labels_pred, distance=linear_distance):
-
+def weighted_adjusted_rand_score(labels_true: Iterable[int], labels_pred: Iterable[int], distance: callable = linear_distance) -> float:
+    """
+    Compute the Weighted Adjusted Rand Index (WARI).
+    """
+    labels_true = np.asarray(labels_true)
+    labels_pred = np.asarray(labels_pred)
     (tn, fp), (fn, tp) = weighted_pair_confusion_matrix(labels_true, labels_pred, distance)
     # convert to Python integer types, to avoid overflow or underflow
     tn, fp, fn, tp = int(tn), int(fp), int(fn), int(tp)
@@ -428,8 +339,10 @@ def weighted_adjusted_rand_score(labels_true, labels_pred, distance=linear_dista
 # Weighted Normalized Mutual Info Score (WNMI)
 #------------------------------------------------------
 
-def weighted_normalized_mutual_info_score(labels_true, labels_pred, distance=linear_distance, *, average_method="arithmetic"):
+def weighted_normalized_mutual_info_score(labels_true: Iterable[int], labels_pred: Iterable[int], distance: callable = linear_distance, *, average_method: str = "arithmetic") -> float:
     
+    labels_true = np.asarray(labels_true)
+    labels_pred = np.asarray(labels_pred)
     classes = np.unique(labels_true)
     clusters = np.unique(labels_pred)
 
@@ -464,50 +377,15 @@ def weighted_normalized_mutual_info_score(labels_true, labels_pred, distance=lin
 # State Matching Score (SMS)
 #------------------------------------------------------
 
-def optimal_label_mapping(labels_true, labels_pred):
+def compute_boundaries_symmetrical(labels: np.ndarray) -> List[int]:
     """
-    Compute an optimal mapping from predicted labels to true labels.
-    
-    The mapping is computed by building a confusion matrix between the unique
-    labels in the true and predicted arrays, and then using the Hungarian algorithm
-    to find the assignment that maximizes the total number of matching points.
+    Computes the indices of the boundaries in the label sequence.
     
     Parameters:
-      labels_true: numpy array of ground truth labels.
-      labels_pred: numpy array of predicted labels.
-      
+        labels: numpy array of labels.
+    
     Returns:
-      mapping: dict such that mapping[pred_label] = true_label.
-    """
-    true_labels = np.unique(labels_true)
-    pred_labels = np.unique(labels_pred)
-    
-    # Build confusion matrix: rows for true labels, columns for pred labels.
-    C = np.zeros((len(true_labels), len(pred_labels)), dtype=int)
-    for i, t in enumerate(true_labels):
-        for j, p in enumerate(pred_labels):
-            C[i, j] = np.sum((labels_true == t) & (labels_pred == p))
-    
-    # We want to maximize total overlap.
-    # The Hungarian algorithm minimizes cost so we use -C.
-    row_ind, col_ind = linear_sum_assignment(-C)
-    mapping = {}
-    for i, j in zip(row_ind, col_ind):
-        mapping[pred_labels[j]] = true_labels[i]
-    return mapping
-
-def apply_mapping(labels_pred, mapping):
-    """
-    Apply the optimal mapping to predicted labels.
-    """
-    # If a predicted label is not in the mapping, leave it unchanged.
-    return np.array([mapping.get(x, x) for x in labels_pred])
-
-def compute_boundaries(labels):
-    """
-    Compute boundaries (indices where the label changes).
-    
-    A boundary is defined as the index at which the new segment starts.
+        List of indices where the label changes.
     """
     boundaries = []
     for i in range(1, len(labels)):
@@ -519,7 +397,7 @@ def compute_boundaries(labels):
 # SMS
 #------------------------------------------------------
 
-def map_predicted_labels(labels_true, labels_pred):
+def map_predicted_labels(labels_true: np.ndarray, labels_pred: np.ndarray) -> np.ndarray:
     """
     Maps predicted labels to match true labels using the Hungarian algorithm,
     ensuring the number of unique output labels equals the number of unique
@@ -603,7 +481,7 @@ def map_predicted_labels(labels_true, labels_pred):
 
     return mapped_pred
 
-def error_type(error_label, true_atomicity, p0, p1, t0, t1):
+def error_type(error_label: int, true_atomicity: int, p0: Optional[int], p1: Optional[int], t0: Optional[int], t1: Optional[int]) -> str:
     if true_atomicity == 1:
         # Delay
         # Check if the predicted error label matches either the preceding or succeeding true label.
@@ -623,8 +501,10 @@ def error_type(error_label, true_atomicity, p0, p1, t0, t1):
         # Missing
         # True labels contain more than two different labels.
         return "missing"
+    
+    return "unknown"
 
-def nearest_block_boundary_distance(true_boundaries, block_start, block_end):
+def nearest_block_boundary_distance(true_boundaries: np.ndarray, block_start: int, block_end: int) -> float:
     """
     Computes the distance from the center of an error block to the nearest true boundary.
 
@@ -643,33 +523,7 @@ def nearest_block_boundary_distance(true_boundaries, block_start, block_end):
 
     return min_dist
 
-def compute_boundaries_symmetrical(labels):
-    """
-    Computes the indices of the boundaries in the label sequence.
-    
-    Parameters:
-        labels: numpy array of labels.
-    
-    Returns:
-        List of indices where the label changes.
-    """
-    boundaries = []
-    for i in range(1, len(labels)):
-        if labels[i] != labels[i-1]:
-            #boundaries.append(i-1)
-            boundaries.append(i)
-    return boundaries
-
-def reduced_labels(sequence):
-    # Remove consecutive duplicates while preserving order
-    if len(sequence) > 0:
-        reduced_segment = [sequence[0]]
-        for x in sequence[1:]:
-            if x != reduced_segment[-1]:
-                reduced_segment.append(x)
-    return reduced_segment
-
-def atomicity(sequence):
+def atomicity(sequence: np.ndarray) -> int:
     # Remove consecutive duplicates while preserving order
     if len(sequence) > 0:
         reduced_segment = [sequence[0]]
@@ -681,10 +535,7 @@ def atomicity(sequence):
         sequence_atomicity = 0
     return sequence_atomicity
 
-def state_matching_score(labels_true, labels_pred, weights={'delay': 0.1,
-                                                            'transition': 0.3,
-                                                            'isolation': 0.8,
-                                                            'missing': 0.5}, return_mapped=False, return_errors=False):
+def state_matching_score(labels_true: Iterable[int], labels_pred: Iterable[int], weights: Dict[str, float] = {'delay': 0.1, 'transition': 0.3, 'isolation': 0.8, 'missing': 0.5}, return_mapped: bool = False, return_errors: bool = False) -> Union[float, Tuple[float, np.ndarray], Tuple[float, List[Dict[str, Any]]], Tuple[float, np.ndarray, List[Dict[str, Any]]], None]:
     """
     Computes a new State Matching Score (SMS) based on identifying and classifying
     error segments between true and predicted label sequences after optimal mapping.
@@ -720,6 +571,8 @@ def state_matching_score(labels_true, labels_pred, weights={'delay': 0.1,
             - If return_mapped is True and return_errors is True: (score, mapped_pred, errors_list).
             Returns None if input is empty.
     """
+    labels_true = np.asarray(labels_true)
+    labels_pred = np.asarray(labels_pred)
     n = len(labels_true)
     if n == 0:
         return None # Return None for empty input
